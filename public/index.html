@@ -9,7 +9,6 @@
 </head>
 <body>
 
-    <!-- LOGIN -->
     <div id="login-screen">
         <div class="login-box">
             <div class="login-title">Clean Reader</div>
@@ -18,43 +17,50 @@
         </div>
     </div>
 
-    <!-- APP -->
     <div id="app-screen" class="hidden container">
         <header class="header">
             <div class="brand">Reader.</div>
+            <div class="search-wrap">
+                <input type="text" placeholder="Search..." onkeyup="handleSearch(this.value)" id="searchInput">
+            </div>
             <button class="logout" onclick="handleLogout()">Log out</button>
         </header>
 
-        <!-- Save -->
         <div class="input-group">
             <input type="url" id="urlInput" placeholder="Paste article URL...">
             <button class="btn-save" onclick="doAction('save')">Save</button>
         </div>
         <div id="status" class="status-msg"></div>
 
-        <!-- Controls -->
         <div class="controls">
             <div class="tabs">
                 <button class="tab active" onclick="switchView('inbox')" id="tab-inbox">Reading List</button>
+                <button class="tab" onclick="switchView('hn')" id="tab-hn">Hacker News</button>
                 <button class="tab" onclick="switchView('archive')" id="tab-archive">Archive</button>
-                <!-- NEW LINK -->
                 <a href="highlights.html" class="tab" style="text-decoration:none;">Highlights</a>
-                <a href="settings.html" class="tab" style="text-decoration:none;">Settings ⚙️</a> </div>
-            </div>
-            <div class="search-wrap">
-                <input type="text" placeholder="Search..." onkeyup="handleSearch(this.value)" id="searchInput">
+                <a href="settings.html" class="tab" style="text-decoration:none;">Settings ⚙️</a>
             </div>
         </div>
 
-        <!-- List -->
         <ul id="list" class="article-list">
             <li style="padding:40px 0; text-align:center; color:var(--text-muted);">Loading library...</li>
         </ul>
+        
+        <div id="pagination" class="pagination hidden">
+            <button onclick="changePage(-1)" class="btn-icon">&larr; Prev</button>
+            <span id="page-num">Page 1</span>
+            <button onclick="changePage(1)">Next &rarr;</button>
+        </div>
     </div>
 
     <script>
         const API_URL = '/api/library';
         let view = 'inbox';
+        
+        // HN State
+        let hnStoriesIds = [];
+        let hnPage = 0;
+        const PAGE_SIZE = 20;
 
         function init() {
             if(localStorage.getItem('clean_reader_key')) {
@@ -90,10 +96,103 @@
         }
 
         async function loadList() {
+            document.getElementById('pagination').classList.add('hidden');
+            if (view === 'hn') {
+                loadHN();
+                return;
+            }
             const isArchived = view === 'archive';
             const data = await api('list', 'GET', null, { archived: isArchived });
             renderList(data);
         }
+
+        // --- HACKER NEWS LOGIC ---
+        
+        async function loadHN() {
+            const list = document.getElementById('list');
+            list.innerHTML = `<li style="padding:40px 0; text-align:center; color:var(--text-muted);">Fetching Hacker News...</li>`;
+
+            try {
+                // Fetch IDs if we don't have them
+                if (hnStoriesIds.length === 0) {
+                    const res = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+                    hnStoriesIds = await res.json();
+                }
+
+                const start = hnPage * PAGE_SIZE;
+                const end = start + PAGE_SIZE;
+                const pageIds = hnStoriesIds.slice(start, end);
+
+                // Fetch details for this page
+                const promises = pageIds.map(id => 
+                    fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json())
+                );
+                const items = await Promise.all(promises);
+
+                renderHNList(items);
+                
+                document.getElementById('pagination').classList.remove('hidden');
+                document.getElementById('page-num').innerText = `Page ${hnPage + 1}`;
+
+            } catch (e) {
+                list.innerHTML = `<li style="color:red; text-align:center;">Error loading HN</li>`;
+                console.error(e);
+            }
+        }
+
+        function renderHNList(items) {
+            const list = document.getElementById('list');
+            list.innerHTML = items.map(item => {
+                if(!item) return '';
+                const domain = item.url ? new URL(item.url).hostname.replace('www.','') : 'news.ycombinator.com';
+                // Only enable clicking if it has a URL (some are just text)
+                const action = item.url ? `onclick="saveAndRead('${item.url}', ${item.id}, this)"` : '';
+                const style = item.url ? 'cursor:pointer' : 'cursor:default';
+                
+                return `
+                <li class="article-item hn-item">
+                    <div class="article-info">
+                        <span ${action} class="article-title" style="${style}">${item.title}</span>
+                        <div class="article-meta">
+                            ${item.score} points &middot; by ${item.by} &middot; ${domain} &middot; ${item.descendants || 0} comments
+                        </div>
+                    </div>
+                    <div class="actions" style="opacity:1">
+                        ${item.url ? `
+                            <button class="btn-icon" onclick="window.open('${item.url}', '_blank')" title="Open External">
+                                🔗
+                            </button>
+                        ` : ''}
+                    </div>
+                </li>
+            `}).join('');
+        }
+
+        function changePage(dir) {
+            const maxPage = Math.floor(hnStoriesIds.length / PAGE_SIZE);
+            hnPage += dir;
+            if(hnPage < 0) hnPage = 0;
+            if(hnPage > maxPage) hnPage = maxPage;
+            loadHN();
+        }
+
+        async function saveAndRead(url, hnId, el) {
+            const originalText = el.innerText;
+            el.innerText = "Saving & Loading...";
+            el.style.color = "var(--accent)";
+
+            const res = await api('save', 'POST', { url });
+            
+            if(res && res.success && res.id) {
+                // Redirect to reader with BOTH our ID and HN ID
+                window.location.href = `reader.html?id=${res.id}&hn_id=${hnId}`;
+            } else {
+                el.innerText = "Error Saving";
+                setTimeout(() => el.innerText = originalText, 2000);
+            }
+        }
+
+        // --- EXISTING RENDER ---
 
         function renderList(items) {
             const list = document.getElementById('list');
@@ -158,6 +257,9 @@
             view = v;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.getElementById('tab-' + v).classList.add('active');
+            
+            // Hide search on HN view if desired, or keep it. 
+            // HN search isn't implemented, so maybe clear it.
             document.getElementById('searchInput').value = '';
             loadList();
         }

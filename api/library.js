@@ -16,7 +16,6 @@ export default async function handler(req, res) {
 
   try {
     switch (type) {
-      // --- EXISTING CASES ---
       case 'list': {
         const showArchived = req.query.archived === 'true' ? 1 : 0;
         const result = await turso.execute({
@@ -46,6 +45,7 @@ export default async function handler(req, res) {
         return res.status(200).json(result.rows);
       }
 
+      // --- UPDATED SAVE CASE ---
       case 'save': {
         const { url } = req.body;
         if (!url) throw new Error("URL required");
@@ -53,7 +53,9 @@ export default async function handler(req, res) {
         const { JSDOM } = await import("jsdom");
         const { Readability } = await import("@mozilla/readability");
 
-        const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }});
+        const response = await fetch(url, { 
+            headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }
+        });
         const html = await response.text();
         const doc = new JSDOM(html, { url });
         
@@ -65,12 +67,18 @@ export default async function handler(req, res) {
         const reader = new Readability(doc.window.document);
         const article = reader.parse();
 
-        await turso.execute({
+        // Insert into DB
+        const result = await turso.execute({
           sql: `INSERT INTO articles (url, title, content, created_at) VALUES (?, ?, ?, datetime('now'))`,
           args: [url, article.title, article.content]
         });
 
-        return res.status(200).json({ success: true, title: article.title });
+        // RETURN THE ID (Fix for HN "Save & Read")
+        return res.status(200).json({ 
+            success: true, 
+            title: article.title, 
+            id: result.lastInsertRowid.toString() 
+        });
       }
 
       case 'archive': {
@@ -90,8 +98,6 @@ export default async function handler(req, res) {
         });
         return res.status(200).json({ success: true });
       }
-
-      // --- NEW HIGHLIGHT FEATURES ---
 
       case 'add_highlight': {
         const { article_id, quote, note } = req.body;
@@ -114,7 +120,6 @@ export default async function handler(req, res) {
       }
 
       case 'all_highlights': {
-        // Joins with articles to get the title for the highlights page
         const result = await turso.execute(`
             SELECT h.id, h.quote, h.note, h.created_at, h.article_id, a.title 
             FROM highlights h 
