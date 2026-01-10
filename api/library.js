@@ -16,10 +16,13 @@ export default async function handler(req, res) {
 
   try {
     switch (type) {
+      // --- MAIN ARTICLE LOGIC ---
+      
       case 'list': {
         const showArchived = req.query.archived === 'true' ? 1 : 0;
+        // Added hn_id to selection
         const result = await turso.execute({
-          sql: "SELECT id, title, url, created_at, is_archived FROM articles WHERE is_archived = ? ORDER BY created_at DESC LIMIT 50",
+          sql: "SELECT id, title, url, created_at, is_archived, hn_id FROM articles WHERE is_archived = ? ORDER BY created_at DESC LIMIT 50",
           args: [showArchived]
         });
         return res.status(200).json(result.rows);
@@ -45,20 +48,23 @@ export default async function handler(req, res) {
         return res.status(200).json(result.rows);
       }
 
-      // --- UPDATED SAVE CASE ---
       case 'save': {
-        const { url } = req.body;
+        const { url, hn_id } = req.body;
         if (!url) throw new Error("URL required");
 
         const { JSDOM } = await import("jsdom");
         const { Readability } = await import("@mozilla/readability");
 
-        const response = await fetch(url, { 
+        // Clean URL for fetching (remove hash fragments)
+        const fetchUrl = url.split('#')[0];
+
+        const response = await fetch(fetchUrl, { 
             headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }
         });
         const html = await response.text();
-        const doc = new JSDOM(html, { url });
+        const doc = new JSDOM(html, { url: fetchUrl });
         
+        // Fix lazy-loaded images
         doc.window.document.querySelectorAll('img').forEach(img => {
             const lazy = img.getAttribute('data-src') || img.getAttribute('data-url');
             if(lazy) img.src = lazy;
@@ -67,13 +73,13 @@ export default async function handler(req, res) {
         const reader = new Readability(doc.window.document);
         const article = reader.parse();
 
-        // Insert into DB
+        // Insert into DB with hn_id
         const result = await turso.execute({
-          sql: `INSERT INTO articles (url, title, content, created_at) VALUES (?, ?, ?, datetime('now'))`,
-          args: [url, article.title, article.content]
+          sql: `INSERT INTO articles (url, title, content, hn_id, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+          args: [fetchUrl, article.title, article.content, hn_id || null]
         });
 
-        // RETURN THE ID (Fix for HN "Save & Read")
+        // Return the new ID so frontend can redirect
         return res.status(200).json({ 
             success: true, 
             title: article.title, 
@@ -99,6 +105,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true });
       }
 
+      // --- HIGHLIGHT FEATURES ---
+
       case 'add_highlight': {
         const { article_id, quote, note } = req.body;
         if (!article_id || !quote) return res.status(400).json({ error: "Missing data" });
@@ -120,6 +128,7 @@ export default async function handler(req, res) {
       }
 
       case 'all_highlights': {
+        // Joins with articles to get the title for the highlights page
         const result = await turso.execute(`
             SELECT h.id, h.quote, h.note, h.created_at, h.article_id, a.title 
             FROM highlights h 
