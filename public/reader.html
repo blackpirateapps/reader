@@ -114,7 +114,8 @@
             // Get IDs from URL
             const urlParams = new URLSearchParams(window.location.search);
             const id = urlParams.get('id');
-            const hnId = urlParams.get('hn_id');
+            // Support explicit hn_id override if present (though DB is primary now)
+            const paramHnId = urlParams.get('hn_id');
             
             if(!id) {
                 document.getElementById('content-wrapper').innerHTML = "Article ID missing.";
@@ -127,15 +128,10 @@
             initSettingsUI();
             
             // Load Content
-            loadArticle(id);
-
-            // Load HN Comments (if present)
-            if (hnId) {
-                loadHNComments(hnId);
-            }
+            loadArticle(id, paramHnId);
         }
 
-        async function loadArticle(id) {
+        async function loadArticle(id, paramHnId) {
             try {
                 const res = await fetch(`${API_URL}?type=read&id=${id}`, {
                     headers: { 'Content-Type': 'application/json', 'x-auth-key': localStorage.getItem('clean_reader_key') }
@@ -147,6 +143,14 @@
                 renderContent(data);
                 loadHighlights(id);
 
+                // --- HN LOGIC (Updated for DB Column) ---
+                // Priority: 1. URL Param (Override) 2. DB Column (Persistent)
+                const finalHnId = paramHnId || data.hn_id;
+                
+                if (finalHnId) {
+                    loadHNComments(finalHnId);
+                }
+
             } catch(e) {
                 document.getElementById('content-wrapper').innerText = "Error loading article.";
                 console.error(e);
@@ -156,7 +160,6 @@
         function renderContent(data) {
             document.title = data.title;
             
-            // Calculate Stats
             const tempDiv = document.createElement("div");
             tempDiv.innerHTML = data.content;
             const text = tempDiv.textContent || tempDiv.innerText || "";
@@ -183,7 +186,7 @@
             document.getElementById('content-wrapper').innerHTML = html;
         }
 
-        // --- HACKER NEWS COMMENTS LOGIC ---
+        // --- HACKER NEWS COMMENTS LOGIC (With Replies) ---
 
         async function loadHNComments(hnId) {
             const container = document.getElementById('hn-comments-section');
@@ -194,7 +197,7 @@
                 const res = await fetch(`https://hacker-news.firebaseio.com/v0/item/${hnId}.json`);
                 const story = await res.json();
                 
-                if (!story.kids || story.kids.length === 0) {
+                if (!story || !story.kids || story.kids.length === 0) {
                     list.innerHTML = "<div style='text-align:center; padding:20px; color:var(--text-muted)'>No comments yet.</div>";
                     return;
                 }
@@ -216,15 +219,54 @@
         function renderComment(c) {
             if(!c || c.deleted || c.dead) return '';
             const time = new Date(c.time * 1000).toLocaleDateString();
+            
+            // Check for children
+            let replyUI = '';
+            if (c.kids && c.kids.length > 0) {
+                replyUI = `
+                    <div class="hn-reply-wrapper">
+                        <button class="hn-load-replies" onclick="loadReplies(this, '${c.kids.join(',')}')">
+                            &#x21aa; Load ${c.kids.length} replies
+                        </button>
+                        <div class="hn-replies-container"></div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="hn-comment">
                     <div class="hn-meta">
                         <strong>${c.by}</strong> &bull; ${time}
                     </div>
                     <div class="hn-text">${c.text}</div>
-                    ${c.kids ? `<div class="hn-reply-count">${c.kids.length} replies (view on HN)</div>` : ''}
+                    ${replyUI}
                 </div>
             `;
+        }
+
+        async function loadReplies(btn, kidsStr) {
+            const container = btn.nextElementSibling; // The empty div
+            const ids = kidsStr.split(',');
+            
+            btn.innerText = "Loading...";
+            
+            try {
+                // Limit to 20 replies to prevent overload
+                const promises = ids.slice(0, 20).map(id => 
+                    fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json())
+                );
+                const comments = await Promise.all(promises);
+                
+                // Render recursively
+                container.innerHTML = comments.map(c => renderComment(c)).join('');
+                
+                btn.style.display = 'none'; // Hide button on success
+                container.style.marginTop = "15px";
+                
+            } catch(e) {
+                btn.innerText = "Error loading replies.";
+                console.error(e);
+            }
         }
 
         // --- HIGHLIGHTING LOGIC ---
