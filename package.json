@@ -7,6 +7,6 @@
   "dependencies": {
     "@libsql/client": "latest",
     "@mozilla/readability": "latest",
-    "jsdom": "latest"
+    "jsdom": "^23.0.0"
   }
 }
