@@ -1,0 +1,12 @@
+{
+  "name": "clean-reader",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@libsql/client": "latest",
+    "@mozilla/readability": "latest",
+    "jsdom": "latest"
+  }
+}

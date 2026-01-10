@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Raw Clean Reader</title>
+</head>
+<body>
+
+    <h1>Clean Reader</h1>
+    
+    <div>
+        <label>Secret Key: <input type="password" id="secretKey"></label>
+    </div>
+    <hr>
+
+    <h3>Save New Article</h3>
+    <div>
+        <input type="url" id="urlInput" placeholder="https://..." size="50">
+        <button onclick="saveArticle()">Save</button>
+        <span id="saveStatus"></span>
+    </div>
+    <hr>
+
+    <h3>Saved Articles</h3>
+    <button onclick="loadList()">Refresh List</button>
+    <ul id="articleList"></ul>
+
+    <hr>
+
+    <div id="readerView" style="display:none; border:1px solid black; padding: 10px;">
+        <button onclick="closeReader()">Close Article</button>
+        <button onclick="deleteCurrent()">Delete Article</button>
+        <h2 id="readerTitle"></h2>
+        <div id="readerContent"></div>
+    </div>
+
+    <script>
+        let currentArticleId = null;
+
+        // Helper to get headers
+        function getHeaders() {
+            return { 
+                'Content-Type': 'application/json',
+                'x-auth-key': document.getElementById('secretKey').value
+            };
+        }
+
+        // 1. SAVE
+        async function saveArticle() {
+            const url = document.getElementById('urlInput').value;
+            const status = document.getElementById('saveStatus');
+            status.innerText = "Processing...";
+
+            try {
+                const res = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+                if(res.ok) {
+                    status.innerText = "Saved!";
+                    document.getElementById('urlInput').value = "";
+                    loadList(); // Auto refresh list
+                } else {
+                    status.innerText = "Error: " + data.error;
+                }
+            } catch (e) { status.innerText = e.message; }
+        }
+
+        // 2. LIST
+        async function loadList() {
+            const listEl = document.getElementById('articleList');
+            listEl.innerHTML = "Loading...";
+
+            try {
+                const res = await fetch('/api/list', { headers: getHeaders() });
+                if(res.status === 401) {
+                    listEl.innerHTML = "Unauthorized. Check Key."; 
+                    return;
+                }
+                const data = await res.json();
+                
+                listEl.innerHTML = "";
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    // Create a link that calls readArticle(id)
+                    li.innerHTML = `
+                        <a href="#" onclick="readArticle(${item.id}); return false;">
+                            ${item.title || '(No Title)'}
+                        </a> 
+                        <small>(${new Date(item.created_at).toLocaleDateString()})</small>
+                         - <a href="${item.url}" target="_blank">Orig</a>
+                    `;
+                    listEl.appendChild(li);
+                });
+            } catch (e) { listEl.innerText = e.message; }
+        }
+
+        // 3. READ
+        async function readArticle(id) {
+            currentArticleId = id;
+            document.getElementById('readerView').style.display = 'block';
+            document.getElementById('readerContent').innerHTML = "Loading content...";
+            document.getElementById('readerTitle').innerText = "";
+
+            try {
+                const res = await fetch(`/api/read?id=${id}`, { headers: getHeaders() });
+                const data = await res.json();
+                
+                document.getElementById('readerTitle').innerText = data.title;
+                document.getElementById('readerContent').innerHTML = data.content;
+            } catch (e) { document.getElementById('readerContent').innerText = e.message; }
+        }
+
+        // 4. DELETE
+        async function deleteCurrent() {
+            if(!confirm("Delete this article?")) return;
+            try {
+                await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ id: currentArticleId })
+                });
+                closeReader();
+                loadList();
+            } catch(e) { alert(e.message); }
+        }
+
+        function closeReader() {
+            document.getElementById('readerView').style.display = 'none';
+            currentArticleId = null;
+        }
+    </script>
+</body>
+</html>
