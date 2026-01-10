@@ -4,188 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Clean Reader</title>
-    <style>
-        /* --- SWISS EDITORIAL THEME --- */
-        :root {
-            --bg-color: #FAFAF9;      /* Warm paper */
-            --surface-color: #FFFFFF; /* White */
-            --text-main: #18181B;     /* Deep Zinc */
-            --text-muted: #71717A;    /* Muted Zinc */
-            --accent: #EA580C;        /* Burnt Orange */
-            --border: #E4E4E7;        /* Light Gray */
-            
-            --font-serif: "Charter", "Bitstream Charter", "Sitka Text", Cambria, serif;
-            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        /* Dark Mode (Black Theme) overrides */
-        [data-theme="black"] {
-            --bg-color: #09090b;
-            --surface-color: #18181b;
-            --text-main: #e4e4e7;
-            --text-muted: #a1a1aa;
-            --accent: #f97316;
-            --border: #27272a;
-        }
-
-        /* --- RESET & BASE --- */
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            margin: 0;
-            padding: 0;
-            line-height: 1.5;
-            transition: background 0.3s, color 0.3s;
-        }
-
-        .container {
-            max-width: 640px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        button { 
-            cursor: pointer; 
-            font-family: inherit; 
-            border: none; 
-            background: none;
-            padding: 0;
-        }
-        
-        input {
-            font-family: inherit;
-            width: 100%;
-            box-sizing: border-box;
-            background: var(--surface-color);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            padding: 12px 16px;
-            font-size: 16px;
-            border-radius: 4px; /* Slight round, mostly square */
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        input:focus { border-color: var(--accent); }
-
-        .hidden { display: none !important; }
-
-        /* --- TYPOGRAPHY --- */
-        h1, h2, h3 { font-family: var(--font-serif); font-weight: 700; margin-top: 0; color: var(--text-main); }
-        
-        /* --- LOGIN SCREEN --- */
-        #login-screen { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-color); }
-        .login-box { width: 100%; max-width: 320px; text-align: center; }
-        .login-title { font-size: 2rem; margin-bottom: 2rem; letter-spacing: -0.03em; }
-        
-        .btn-primary {
-            background: var(--text-main);
-            color: var(--bg-color);
-            width: 100%;
-            padding: 14px;
-            font-weight: 600;
-            margin-top: 1rem;
-            border-radius: 4px;
-            font-size: 0.95rem;
-        }
-        .btn-primary:hover { opacity: 0.9; }
-
-        /* --- APP HEADER --- */
-        .header {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: baseline; 
-            border-bottom: 2px solid var(--text-main);
-            padding-bottom: 12px;
-            margin-bottom: 30px;
-        }
-        .brand { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-        .logout { font-size: 0.85rem; color: var(--text-muted); text-decoration: underline; }
-
-        /* --- INPUT AREA --- */
-        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
-        .btn-save {
-            background: var(--accent);
-            color: white;
-            padding: 0 24px;
-            font-weight: 600;
-            border-radius: 4px;
-        }
-        .status-msg { font-size: 0.85rem; color: var(--text-muted); min-height: 1.2em; margin-bottom: 30px; }
-
-        /* --- CONTROLS --- */
-        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .tabs { display: flex; gap: 20px; }
-        .tab { 
-            font-weight: 600; 
-            color: var(--text-muted); 
-            border-bottom: 2px solid transparent; 
-            padding-bottom: 2px; 
-            font-size: 0.9rem;
-        }
-        .tab.active { color: var(--text-main); border-bottom-color: var(--accent); }
-        .tab:hover { color: var(--text-main); }
-        
-        .search-wrap { position: relative; max-width: 200px; }
-        .search-wrap input { padding: 8px 12px; font-size: 0.9rem; border-radius: 20px; }
-
-        /* --- LIST VIEW --- */
-        .article-list { list-style: none; padding: 0; margin: 0; }
-        .article-item {
-            padding: 20px 0;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            group;
-        }
-        .article-info { flex: 1; padding-right: 20px; }
-        .article-title {
-            font-family: var(--font-serif);
-            font-size: 1.25rem;
-            line-height: 1.3;
-            margin-bottom: 6px;
-            cursor: pointer;
-            color: var(--text-main);
-            text-decoration: none;
-            display: block;
-        }
-        .article-title:hover { color: var(--accent); }
-        .article-meta { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        
-        .actions { display: flex; gap: 12px; opacity: 0; transition: opacity 0.2s; }
-        .article-item:hover .actions { opacity: 1; }
-        /* Always show actions on mobile */
-        @media (max-width: 600px) { .actions { opacity: 1; } }
-
-        .btn-icon { font-size: 1.1rem; color: var(--text-muted); padding: 4px; }
-        .btn-icon:hover { color: var(--text-main); }
-        .btn-icon.delete:hover { color: #ef4444; }
-
-        /* --- READER VIEW --- */
-        #reader-screen { padding-bottom: 100px; }
-        .reader-nav {
-            position: sticky; top: 0;
-            background: var(--bg-color);
-            padding: 20px 0;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 40px;
-            display: flex; justify-content: space-between;
-            z-index: 10;
-        }
-        .back-link { font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-        .back-link:hover { color: var(--text-main); }
-        
-        .article-body { font-size: 1.15rem; line-height: 1.7; max-width: 100%; }
-        .article-body h1 { font-size: 2.5rem; line-height: 1.1; margin-bottom: 0.2em; letter-spacing: -0.02em; }
-        .article-body a { color: var(--accent); text-decoration: underline; }
-        .article-body img { max-width: 100%; height: auto; display: block; margin: 30px auto; }
-        .article-body blockquote { border-left: 3px solid var(--accent); padding-left: 20px; margin: 30px 0; font-style: italic; color: var(--text-muted); }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- 1. LOGIN SCREEN -->
+    <!-- LOGIN -->
     <div id="login-screen">
         <div class="login-box">
             <div class="login-title">Clean Reader</div>
@@ -194,16 +17,16 @@
         </div>
     </div>
 
-    <!-- 2. APP SCREEN -->
+    <!-- APP -->
     <div id="app-screen" class="hidden container">
         <header class="header">
             <div class="brand">Reader.</div>
             <button class="logout" onclick="handleLogout()">Log out</button>
         </header>
 
-        <!-- Input -->
+        <!-- Save -->
         <div class="input-group">
-            <input type="url" id="urlInput" placeholder="Paste article URL to read later...">
+            <input type="url" id="urlInput" placeholder="Paste article URL...">
             <button class="btn-save" onclick="doAction('save')">Save</button>
         </div>
         <div id="status" class="status-msg"></div>
@@ -221,26 +44,14 @@
 
         <!-- List -->
         <ul id="list" class="article-list">
-            <!-- Items go here -->
+            <li style="padding:40px 0; text-align:center; color:var(--text-muted);">Loading library...</li>
         </ul>
-    </div>
-
-    <!-- 3. READER SCREEN -->
-    <div id="reader-screen" class="hidden container">
-        <nav class="reader-nav">
-            <button class="back-link" onclick="closeReader()">
-                <span>&larr;</span> Back to list
-            </button>
-            <button onclick="toggleTheme()" title="Toggle Dark Mode" style="font-size: 1.2rem;">◑</button>
-        </nav>
-        <div id="reader-content" class="article-body"></div>
     </div>
 
     <script>
         const API_URL = '/api/library';
         let view = 'inbox';
 
-        // --- AUTH & INIT ---
         function init() {
             if(localStorage.getItem('clean_reader_key')) {
                 document.getElementById('login-screen').classList.add('hidden');
@@ -248,23 +59,21 @@
                 loadList();
             }
         }
+
         function handleLogin() {
             const key = document.getElementById('secretKeyInput').value;
-            if(key) {
-                localStorage.setItem('clean_reader_key', key);
-                init();
-            }
+            if(key) { localStorage.setItem('clean_reader_key', key); init(); }
         }
+
         function handleLogout() { localStorage.clear(); location.reload(); }
+
         function getHeaders() { return { 'Content-Type': 'application/json', 'x-auth-key': localStorage.getItem('clean_reader_key') }; }
 
-        // --- API & DATA ---
         async function api(type, method = 'GET', body = null, params = {}) {
             let url = `${API_URL}?type=${type}`;
             if(params.q) url += `&q=${params.q}`;
             if(params.archived) url += `&archived=${params.archived}`;
-            if(params.id) url += `&id=${params.id}`;
-
+            
             try {
                 const res = await fetch(url, {
                     method,
@@ -292,17 +101,17 @@
             list.innerHTML = items.map(item => `
                 <li class="article-item">
                     <div class="article-info">
-                        <span class="article-title" onclick="openReader(${item.id})">${item.title}</span>
+                        <a href="reader.html?id=${item.id}" class="article-title">${item.title}</a>
                         <div class="article-meta">
                             ${new Date(item.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} 
                             &middot; ${new URL(item.url).hostname.replace('www.','')}
                         </div>
                     </div>
                     <div class="actions">
-                        <button class="btn-icon" onclick="doAction('${view === 'inbox' ? 'archive' : 'unarchive'}', {id:${item.id}})" title="Archive">
+                        <button class="btn-icon" onclick="doAction('${view === 'inbox' ? 'archive' : 'unarchive'}', {id:${item.id}})">
                             ${view === 'inbox' ? '📥' : '↩️'}
                         </button>
-                        <button class="btn-icon delete" onclick="doAction('delete', {id:${item.id}})" title="Delete">✕</button>
+                        <button class="btn-icon delete" onclick="doAction('delete', {id:${item.id}})">✕</button>
                     </div>
                 </li>
             `).join('');
@@ -320,49 +129,17 @@
                     status.innerText = "Saved.";
                     document.getElementById('urlInput').value = "";
                     if(view === 'inbox') loadList();
-                } else {
-                    status.innerText = "Error saving article.";
-                }
+                } else { status.innerText = "Error saving."; }
                 setTimeout(() => status.innerText = "", 3000);
                 return;
             }
             
-            if (action === 'delete') {
-                if(!confirm("Delete this article permanently?")) return;
-            }
+            if (action === 'delete') if(!confirm("Delete permanently?")) return;
 
             await api(action === 'unarchive' || action === 'archive' ? 'archive' : 'delete', 'POST', { id: payload.id, action });
             loadList();
         }
 
-        // --- READER ---
-        async function openReader(id) {
-            document.getElementById('app-screen').classList.add('hidden');
-            document.getElementById('reader-screen').classList.remove('hidden');
-            document.getElementById('reader-content').innerHTML = "<div style='margin-top:40px; color:var(--text-muted)'>Loading content...</div>";
-            window.scrollTo(0,0);
-
-            const data = await api('read', 'GET', null, { id });
-            if(data) {
-                document.getElementById('reader-content').innerHTML = `
-                    <div style="margin-bottom: 40px; border-bottom: 1px solid var(--border); padding-bottom: 20px;">
-                        <h1>${data.title}</h1>
-                        <div style="color:var(--text-muted); font-size:0.9rem;">
-                            Saved on ${new Date(data.created_at).toLocaleDateString()} &middot; 
-                            <a href="${data.url}" target="_blank" style="color:var(--accent); text-decoration:none;">Original Source &nearr;</a>
-                        </div>
-                    </div>
-                    ${data.content}
-                `;
-            }
-        }
-
-        function closeReader() {
-            document.getElementById('reader-screen').classList.add('hidden');
-            document.getElementById('app-screen').classList.remove('hidden');
-        }
-
-        // --- UTILS ---
         let searchTimer;
         function handleSearch(q) {
             clearTimeout(searchTimer);
@@ -381,14 +158,6 @@
             loadList();
         }
 
-        function toggleTheme() {
-            const html = document.documentElement;
-            const current = html.getAttribute('data-theme');
-            html.setAttribute('data-theme', current === 'paper' ? 'black' : 'paper');
-        }
-
-        // Default Theme
-        document.documentElement.setAttribute('data-theme', 'paper');
         init();
     </script>
 </body>
