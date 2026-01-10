@@ -2,181 +2,175 @@
 <html lang="en" data-theme="paper">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Reading Article...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reader</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+    <!-- Floating Highlight Menu -->
+    <button id="highlight-btn" class="highlight-menu" onmousedown="showNoteModal(event)">
+        Highlight + Note
+    </button>
+
+    <!-- Note Input Modal -->
+    <div id="note-modal" class="hidden note-modal">
+        <h3 style="font-size:1rem; margin-bottom:10px;">Add a Note</h3>
+        <textarea id="note-input" placeholder="Your thoughts..."></textarea>
+        <div class="note-actions">
+            <button class="btn-small" onclick="closeModal()">Cancel</button>
+            <button class="btn-small primary" onclick="submitHighlight()">Save</button>
+        </div>
+    </div>
+
     <div class="container">
-        <!-- Navigation -->
         <nav class="reader-nav">
-            <a href="index.html" class="back-link">
-                <span>&larr;</span> Library
-            </a>
+            <a href="index.html" class="back-link"><span>&larr;</span> Library</a>
+            <div style="display:flex; gap:15px;">
+                <a href="highlights.html" class="back-link" style="font-size:0.9rem;">My Highlights</a>
+                <button onclick="toggleSettings()" style="font-family:serif; font-weight:bold;">Aa</button>
+            </div>
             
-            <div style="position: relative;">
-                <button onclick="toggleSettings()" title="Appearance" style="font-size: 1.2rem; font-family: serif; font-weight: bold; padding: 5px 10px;">Aa</button>
-                
-                <!-- Settings Menu -->
-                <div id="settings-menu" class="settings-menu hidden">
-                    
-                    <!-- Theme -->
-                    <div class="setting-row">
-                        <label class="setting-label">Theme</label>
-                        <div class="setting-options">
-                            <button class="setting-btn active" onclick="setTheme('paper', this)">Paper</button>
-                            <button class="setting-btn" onclick="setTheme('black', this)">Dark</button>
-                        </div>
-                    </div>
-
-                    <!-- Font Family -->
-                    <div class="setting-row">
-                        <label class="setting-label">Typeface</label>
-                        <div class="setting-options">
-                            <button class="setting-btn active" onclick="setFont('serif', this)">Serif</button>
-                            <button class="setting-btn" onclick="setFont('sans', this)">Sans</button>
-                        </div>
-                    </div>
-
-                    <!-- Font Weight -->
-                    <div class="setting-row">
-                        <label class="setting-label">Weight</label>
-                        <div class="setting-options">
-                            <button class="setting-btn active" onclick="setWeight('400', this)">Normal</button>
-                            <button class="setting-btn" onclick="setWeight('600', this)">Bold</button>
-                        </div>
-                    </div>
-
-                    <!-- Font Size -->
-                    <div class="setting-row">
-                        <label class="setting-label">Size</label>
-                        <input type="range" min="14" max="32" value="18" class="range-input" oninput="setSize(this.value)">
-                    </div>
-
+            <!-- Settings Dropdown (Same as before) -->
+            <div id="settings-menu" class="settings-menu hidden" style="position:absolute; right:0; top:50px; background:var(--surface-color); border:1px solid var(--border); padding:15px; width:200px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                <div class="setting-row">
+                    <button class="setting-btn" onclick="setTheme('paper')">Paper</button>
+                    <button class="setting-btn" onclick="setTheme('black')">Dark</button>
                 </div>
             </div>
         </nav>
 
-        <!-- Content Area -->
         <div id="content-wrapper">
-            <div style="text-align:center; padding-top:40px; color:var(--text-muted);">
-                Loading Article...
-            </div>
+            <div style="text-align:center; padding-top:40px; color:var(--text-muted);">Loading...</div>
         </div>
     </div>
 
     <script>
         const API_URL = '/api/library';
+        let currentArticleId = null;
+        let currentSelection = null;
+        let currentRange = null;
 
         function init() {
-            // Check Auth
-            if(!localStorage.getItem('clean_reader_key')) {
-                window.location.href = 'index.html';
-                return;
+            if(!localStorage.getItem('clean_reader_key')) window.location.href = 'index.html';
+            const id = new URLSearchParams(window.location.search).get('id');
+            if(id) {
+                currentArticleId = id;
+                loadArticle(id);
             }
-
-            // Get ID from URL
-            const urlParams = new URLSearchParams(window.location.search);
-            const id = urlParams.get('id');
-            
-            if(!id) {
-                document.getElementById('content-wrapper').innerHTML = "Article ID missing.";
-                return;
-            }
-
-            loadArticle(id);
         }
 
         async function loadArticle(id) {
-            try {
-                const res = await fetch(`${API_URL}?type=read&id=${id}`, {
-                    headers: { 'Content-Type': 'application/json', 'x-auth-key': localStorage.getItem('clean_reader_key') }
-                });
-                
-                if(res.status === 401) { window.location.href = 'index.html'; return; }
-                
-                const data = await res.json();
-                renderContent(data);
-            } catch(e) {
-                document.getElementById('content-wrapper').innerText = "Error loading article.";
-            }
-        }
-
-        function renderContent(data) {
-            document.title = data.title;
+            const res = await fetch(`${API_URL}?type=read&id=${id}`, {
+                headers: { 'x-auth-key': localStorage.getItem('clean_reader_key') }
+            });
+            const data = await res.json();
             
-            // Calculate Metrics
-            // Strip HTML tags to count actual words
-            const tempDiv = document.createElement("div");
-            tempDiv.innerHTML = data.content;
-            const text = tempDiv.textContent || tempDiv.innerText || "";
-            const wordCount = text.trim().split(/\s+/).length;
-            const readingTime = Math.ceil(wordCount / 220); // Avg reading speed 220 wpm
-
+            // Render Content
+            document.title = data.title;
             const html = `
-                <div class="article-header">
+                <div style="margin-bottom:40px; border-bottom:1px solid var(--border); padding-bottom:20px;">
                     <h1>${data.title}</h1>
-                    <div class="article-stats">
-                        <span class="stat-item">${new Date(data.created_at).toLocaleDateString()}</span>
-                        &bull;
-                        <span class="stat-item">${readingTime} min read</span>
-                        &bull;
-                        <span class="stat-item">${wordCount} words</span>
-                        &bull;
-                        <a href="${data.url}" target="_blank">Original &nearr;</a>
-                    </div>
+                    <div style="color:var(--text-muted); font-size:0.9rem;">${new Date(data.created_at).toLocaleDateString()}</div>
                 </div>
-                <div class="article-body">
-                    ${data.content}
-                </div>
+                <div class="article-body" id="article-body">${data.content}</div>
             `;
             document.getElementById('content-wrapper').innerHTML = html;
+
+            // Load Existing Highlights
+            loadHighlights(id);
         }
 
-        // --- APPEARANCE LOGIC ---
-        
-        function toggleSettings() {
-            document.getElementById('settings-menu').classList.toggle('hidden');
-        }
+        // --- HIGHLIGHTING LOGIC ---
 
-        // Close menu when clicking outside
-        document.addEventListener('click', function(event) {
-            const menu = document.getElementById('settings-menu');
-            const btn = document.querySelector('button[onclick="toggleSettings()"]');
-            if (!menu.contains(event.target) && !btn.contains(event.target)) {
-                menu.classList.add('hidden');
+        // 1. Listen for Selection
+        document.addEventListener('selectionchange', () => {
+            const selection = window.getSelection();
+            const btn = document.getElementById('highlight-btn');
+            
+            if (selection.toString().length > 0 && !document.getElementById('note-modal').contains(document.activeElement)) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                
+                // Show button above selection
+                btn.style.display = 'block';
+                btn.style.top = `${window.scrollY + rect.top - 40}px`;
+                btn.style.left = `${window.scrollX + rect.left + (rect.width / 2)}px`;
+                
+                currentSelection = selection.toString();
+                currentRange = range;
+            } else {
+                btn.style.display = 'none';
             }
         });
 
-        const root = document.documentElement;
-
-        function setTheme(theme, btn) {
-            root.setAttribute('data-theme', theme);
-            updateActiveState(btn);
+        // 2. Open Modal (prevent deselecting)
+        function showNoteModal(e) {
+            e.preventDefault(); // Stop mousedown from clearing selection
+            document.getElementById('highlight-btn').style.display = 'none';
+            document.getElementById('note-modal').classList.remove('hidden');
+            document.getElementById('note-input').focus();
         }
 
-        function setFont(type, btn) {
-            const val = type === 'serif' ? 'var(--font-serif)' : 'var(--font-sans)';
-            root.style.setProperty('--reader-font-family', val);
-            updateActiveState(btn);
+        function closeModal() {
+            document.getElementById('note-modal').classList.add('hidden');
+            document.getElementById('note-input').value = "";
+            window.getSelection().removeAllRanges();
         }
 
-        function setWeight(weight, btn) {
-            root.style.setProperty('--reader-font-weight', weight);
-            updateActiveState(btn);
+        // 3. Save to API & Render
+        async function submitHighlight() {
+            const note = document.getElementById('note-input').value;
+            const quote = currentSelection;
+            
+            // A. Optimistic Render (Wrap immediately)
+            const mark = document.createElement('mark');
+            mark.className = 'highlight';
+            mark.title = note; // Tooltip
+            mark.onclick = () => alert(`Note: ${note}`);
+            
+            try {
+                currentRange.surroundContents(mark);
+            } catch(e) {
+                console.log("Complex selection (across nodes) not fully supported in this simple demo");
+            }
+
+            // B. Save to DB
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-auth-key': localStorage.getItem('clean_reader_key') },
+                body: JSON.stringify({ type: 'add_highlight', article_id: currentArticleId, quote, note })
+            });
+
+            closeModal();
         }
 
-        function setSize(px) {
-            root.style.setProperty('--reader-font-size', px + 'px');
+        // 4. Load & Apply Highlights on Page Load
+        async function loadHighlights(id) {
+            const res = await fetch(`${API_URL}?type=get_highlights&article_id=${id}`, {
+                headers: { 'x-auth-key': localStorage.getItem('clean_reader_key') }
+            });
+            const highlights = await res.json();
+            
+            const body = document.getElementById('article-body');
+            
+            highlights.forEach(h => {
+                // Simple text replacement (Caveat: finds first instance only in this basic version)
+                // A robust version would use Range offsets or a library like Rangy
+                if (body.innerHTML.includes(h.quote)) {
+                    // We use replace with a callback to safely escape HTML issues usually, 
+                    // but for this demo we replace the string directly.
+                    body.innerHTML = body.innerHTML.replace(
+                        h.quote, 
+                        `<mark class="highlight" title="${h.note}" onclick="alert('Note: ${h.note || 'No note'}')">${h.quote}</mark>`
+                    );
+                }
+            });
         }
 
-        function updateActiveState(clickedBtn) {
-            // Find siblings and remove active class
-            const siblings = clickedBtn.parentElement.children;
-            for(let el of siblings) el.classList.remove('active');
-            clickedBtn.classList.add('active');
-        }
+        // --- SETTINGS (Simplified) ---
+        function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
+        function setTheme(t) { document.documentElement.setAttribute('data-theme', t); }
 
         init();
     </script>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="paper">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Highlights</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <header class="header">
+            <div class="brand">Highlights.</div>
+            <a href="index.html" class="logout" style="text-decoration:none;">&larr; Back to Library</a>
+        </header>
+
+        <ul id="highlights-list" class="article-list">
+            <li style="text-align:center; color:var(--text-muted); padding:40px;">Loading notes...</li>
+        </ul>
+    </div>
+
+    <script>
+        const API_URL = '/api/library';
+
+        async function init() {
+            if(!localStorage.getItem('clean_reader_key')) window.location.href = 'index.html';
+            
+            const res = await fetch(`${API_URL}?type=all_highlights`, {
+                headers: { 'x-auth-key': localStorage.getItem('clean_reader_key') }
+            });
+            const data = await res.json();
+            render(data);
+        }
+
+        function render(items) {
+            const list = document.getElementById('highlights-list');
+            if(items.length === 0) {
+                list.innerHTML = "<div style='text-align:center'>No highlights yet. Select text in an article to start.</div>";
+                return;
+            }
+
+            list.innerHTML = items.map(item => `
+                <div class="highlight-card">
+                    <div class="highlight-quote">"${item.quote}"</div>
+                    ${item.note ? `<div class="highlight-note">📝 ${item.note}</div>` : ''}
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
+                        <a href="reader.html?id=${item.article_id}" class="highlight-source">${item.title} &nearr;</a>
+                        <button onclick="deleteHighlight(${item.id})" class="btn-icon delete" title="Delete Note">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function deleteHighlight(id) {
+            if(!confirm("Delete this highlight?")) return;
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-auth-key': localStorage.getItem('clean_reader_key') },
+                body: JSON.stringify({ type: 'delete_highlight', id })
+            });
+            init(); // Reload
+        }
+
+        init();
+    </script>
+</body>
+</html>

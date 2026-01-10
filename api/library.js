@@ -1,6 +1,6 @@
 import { createClient } from "@libsql/client";
 
-// Initialize DB (Lightweight, safe to load on every request)
+// Initialize DB
 const turso = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,
@@ -12,16 +12,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // 2. Determine Action (from Query param or Body)
-  // Usage: GET /api/library?type=list
-  // Usage: POST /api/library (body: { type: 'save', url: '...' })
   const type = req.query.type || req.body.type;
 
   try {
     switch (type) {
-      
-      // --- READ OPERATIONS (Fast) ---
-
+      // --- EXISTING CASES ---
       case 'list': {
         const showArchived = req.query.archived === 'true' ? 1 : 0;
         const result = await turso.execute({
@@ -51,22 +46,17 @@ export default async function handler(req, res) {
         return res.status(200).json(result.rows);
       }
 
-      // --- WRITE OPERATIONS (Heavier) ---
-
       case 'save': {
         const { url } = req.body;
         if (!url) throw new Error("URL required");
 
-        // DYNAMIC IMPORT: Only load these heavy libs if we are actually saving
         const { JSDOM } = await import("jsdom");
         const { Readability } = await import("@mozilla/readability");
 
         const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }});
         const html = await response.text();
-        
         const doc = new JSDOM(html, { url });
         
-        // Image Fixing Logic
         doc.window.document.querySelectorAll('img').forEach(img => {
             const lazy = img.getAttribute('data-src') || img.getAttribute('data-url');
             if(lazy) img.src = lazy;
@@ -84,7 +74,7 @@ export default async function handler(req, res) {
       }
 
       case 'archive': {
-        const { id, action } = req.body; // action = 'archive' or 'unarchive'
+        const { id, action } = req.body;
         const val = action === 'archive' ? 1 : 0;
         await turso.execute({
             sql: "UPDATE articles SET is_archived = ? WHERE id = ?",
@@ -97,6 +87,48 @@ export default async function handler(req, res) {
         await turso.execute({
             sql: "DELETE FROM articles WHERE id = ?",
             args: [req.body.id]
+        });
+        return res.status(200).json({ success: true });
+      }
+
+      // --- NEW HIGHLIGHT FEATURES ---
+
+      case 'add_highlight': {
+        const { article_id, quote, note } = req.body;
+        if (!article_id || !quote) return res.status(400).json({ error: "Missing data" });
+        
+        const result = await turso.execute({
+            sql: "INSERT INTO highlights (article_id, quote, note) VALUES (?, ?, ?)",
+            args: [article_id, quote, note || ""]
+        });
+        return res.status(200).json({ success: true, id: result.lastInsertRowid });
+      }
+
+      case 'get_highlights': {
+        const { article_id } = req.query;
+        const result = await turso.execute({
+            sql: "SELECT * FROM highlights WHERE article_id = ? ORDER BY id ASC",
+            args: [article_id]
+        });
+        return res.status(200).json(result.rows);
+      }
+
+      case 'all_highlights': {
+        // Joins with articles to get the title for the highlights page
+        const result = await turso.execute(`
+            SELECT h.id, h.quote, h.note, h.created_at, h.article_id, a.title 
+            FROM highlights h 
+            JOIN articles a ON h.article_id = a.id 
+            ORDER BY h.created_at DESC LIMIT 100
+        `);
+        return res.status(200).json(result.rows);
+      }
+
+      case 'delete_highlight': {
+        const { id } = req.body;
+        await turso.execute({
+            sql: "DELETE FROM highlights WHERE id = ?",
+            args: [id]
         });
         return res.status(200).json({ success: true });
       }
