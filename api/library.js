@@ -20,7 +20,6 @@ export default async function handler(req, res) {
       
       case 'list': {
         const showArchived = req.query.archived === 'true' ? 1 : 0;
-        // Added hn_id to selection
         const result = await turso.execute({
           sql: "SELECT id, title, url, created_at, is_archived, hn_id FROM articles WHERE is_archived = ? ORDER BY created_at DESC LIMIT 50",
           args: [showArchived]
@@ -61,6 +60,12 @@ export default async function handler(req, res) {
         const response = await fetch(fetchUrl, { 
             headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }
         });
+        
+        // FIX 1: Check if fetch was successful
+        if (!response.ok) {
+            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        }
+        
         const html = await response.text();
         const doc = new JSDOM(html, { url: fetchUrl });
         
@@ -72,6 +77,11 @@ export default async function handler(req, res) {
 
         const reader = new Readability(doc.window.document);
         const article = reader.parse();
+
+        // FIX 2: Check if Readability actually found an article
+        if (!article) {
+            throw new Error("Readability was unable to parse this content. It might not be a text article.");
+        }
 
         // Insert into DB with hn_id
         const result = await turso.execute({
@@ -152,6 +162,7 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error(error);
+    // Return the error message to the frontend so the user knows why it failed
     return res.status(500).json({ error: error.message });
   }
 }
