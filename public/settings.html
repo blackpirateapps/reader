@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="paper">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Clean Reader</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="theme.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header class="header">
+            <div class="brand">Settings.</div>
+            <a href="index.html" class="logout" style="text-decoration:none;">&larr; Back to Library</a>
+        </header>
+
+        <div style="max-width: 400px; margin: 0 auto;">
+            
+            <div class="article-item" style="display:block; border:none;">
+                <h3 style="margin-bottom:15px;">Appearance</h3>
+                <div class="setting-row">
+                    <label class="setting-label">Theme Mode</label>
+                    <div class="setting-options">
+                        <button class="setting-btn" id="btn-theme-paper" onclick="saveSetting('theme', 'paper')">Paper</button>
+                        <button class="setting-btn" id="btn-theme-black" onclick="saveSetting('theme', 'black')">Dark</button>
+                    </div>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border); margin: 20px 0;">
+
+            <div class="article-item" style="display:block; border:none;">
+                <h3 style="margin-bottom:15px;">Reader Defaults</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:20px;">
+                    These settings will apply to all articles by default.
+                </p>
+
+                <div class="setting-row">
+                    <label class="setting-label">Typeface</label>
+                    <div class="setting-options">
+                        <button class="setting-btn" id="btn-font-serif" onclick="saveSetting('font', 'serif')">Serif</button>
+                        <button class="setting-btn" id="btn-font-sans" onclick="saveSetting('font', 'sans')">Sans</button>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <label class="setting-label">Weight</label>
+                    <div class="setting-options">
+                        <button class="setting-btn" id="btn-weight-400" onclick="saveSetting('weight', '400')">Normal</button>
+                        <button class="setting-btn" id="btn-weight-600" onclick="saveSetting('weight', '600')">Bold</button>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <label class="setting-label">Base Font Size (<span id="size-val">18</span>px)</label>
+                    <input type="range" min="14" max="24" value="18" class="range-input" id="input-size" oninput="saveSetting('size', this.value)">
+                </div>
+            </div>
+
+            <div style="margin-top:40px; padding:20px; border:1px dashed var(--border); border-radius:8px;">
+                <div class="article-body">
+                    <p>This is a preview of how your articles will look. The quick brown fox jumps over the lazy dog.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // 1. Helper to set Cookie (expires in 1 year)
+        function setCookie(name, value) {
+            const date = new Date();
+            date.setTime(date.getTime() + (365*24*60*60*1000));
+            document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/`;
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // 2. Save Logic
+        function saveSetting(key, value) {
+            // Save to cookie
+            setCookie('cr_' + key, value);
+            
+            // Update UI State
+            updateActiveButtons();
+            
+            // Apply immediately to see changes in this page (Preview)
+            if(key === 'theme') document.documentElement.setAttribute('data-theme', value);
+            if(key === 'size') {
+                document.documentElement.style.setProperty('--reader-font-size', value + 'px');
+                document.getElementById('size-val').innerText = value;
+            }
+            if(key === 'weight') document.documentElement.style.setProperty('--reader-font-weight', value);
+            if(key === 'font') {
+                const fontStack = value === 'serif' 
+                    ? '"Charter", "Bitstream Charter", "Sitka Text", Cambria, serif' 
+                    : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+                document.documentElement.style.setProperty('--reader-font-family', fontStack);
+            }
+        }
+
+        // 3. Initialize UI on load
+        function updateActiveButtons() {
+            const theme = getCookie('cr_theme') || 'paper';
+            const font = getCookie('cr_font') || 'serif';
+            const weight = getCookie('cr_weight') || '400';
+            const size = getCookie('cr_size') || '18';
+
+            // Reset all active classes
+            document.querySelectorAll('.setting-btn').forEach(b => b.classList.remove('active'));
+
+            // Set active
+            document.getElementById(`btn-theme-${theme}`).classList.add('active');
+            document.getElementById(`btn-font-${font}`).classList.add('active');
+            document.getElementById(`btn-weight-${weight}`).classList.add('active');
+            
+            // Set slider
+            document.getElementById('input-size').value = size;
+            document.getElementById('size-val').innerText = size;
+        }
+
+        // Run on load
+        updateActiveButtons();
+    </script>
+</body>
+</html>
