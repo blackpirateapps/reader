@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="paper">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feeds - Clean Reader</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="theme.js"></script>
+    <style>
+        .feed-controls { display: flex; gap:10px; margin-bottom: 20px; padding: 15px; background: var(--border); border-radius: 8px;}
+        .feed-item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+        .feed-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .feed-title { font-weight: 600; font-size: 1rem; color: var(--text-main); cursor: pointer; }
+        .feed-title:hover { color: var(--accent); }
+        .feed-actions { display: flex; gap: 10px; min-width: 80px; justify-content: flex-end;}
+        .sub-list { font-size: 0.9rem; margin-bottom: 30px; border-bottom: 2px solid var(--text-main); padding-bottom: 15px; }
+        .sub-tag { display: inline-block; padding: 4px 8px; background: var(--surface-color); border: 1px solid var(--border); border-radius: 4px; margin: 0 5px 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="brand">Feeds.</div>
+            <div style="display:flex; gap:15px; align-items:center;">
+                <a href="index.html" class="logout" style="text-decoration:none;">&larr; Library</a>
+            </div>
+        </header>
+
+        <div class="feed-controls">
+            <input type="text" id="new-feed-url" placeholder="Paste RSS/Atom URL..." style="border:none;">
+            <button class="btn-save" onclick="addFeed()">Add</button>
+            <button class="btn-icon" onclick="refreshFeeds()" title="Refresh All">🔄</button>
+        </div>
+
+        <div id="sub-list" class="sub-list">Loading subscriptions...</div>
+
+        <h3 style="margin-bottom:20px;">Unread Items</h3>
+        <div id="feed-list" class="article-list">
+            Loading items...
+        </div>
+    </div>
+
+    <script>
+        const API_FEED = '/api/feeds';
+        const API_LIB = '/api/library'; // For saving
+        const KEY = localStorage.getItem('clean_reader_key');
+
+        if(!KEY) window.location.href = 'index.html';
+
+        async function api(endpoint, type, body={}) {
+            const res = await fetch(`${endpoint}?type=${type}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-auth-key': KEY },
+                body: JSON.stringify({ ...body, type })
+            });
+            return res.json();
+        }
+
+        async function init() {
+            loadSubs();
+            loadItems();
+        }
+
+        async function addFeed() {
+            const url = document.getElementById('new-feed-url').value;
+            if(!url) return;
+            document.querySelector('.btn-save').innerText = "...";
+            await api(API_FEED, 'add_feed', { url });
+            document.getElementById('new-feed-url').value = "";
+            document.querySelector('.btn-save').innerText = "Add";
+            init(); // Reload all
+        }
+
+        async function refreshFeeds() {
+            const btn = document.querySelector('button[title="Refresh All"]');
+            btn.innerText = "⏳";
+            const res = await api(API_FEED, 'refresh_feeds');
+            btn.innerText = "🔄";
+            if(res.new_items > 0) alert(`Found ${res.new_items} new items.`);
+            loadItems();
+        }
+
+        async function loadSubs() {
+            const subs = await api(API_FEED, 'get_subscriptions');
+            const div = document.getElementById('sub-list');
+            if(subs.length === 0) { div.innerHTML = "No subscriptions yet."; return; }
+            
+            div.innerHTML = subs.map(s => `
+                <div class="sub-tag">
+                    ${s.title} 
+                    <span style="cursor:pointer; color:red; margin-left:5px;" onclick="deleteFeed(${s.id})">×</span>
+                </div>
+            `).join('');
+        }
+
+        async function deleteFeed(id) {
+            if(!confirm("Remove this feed?")) return;
+            await api(API_FEED, 'delete_feed', { id });
+            init();
+        }
+
+        async function loadItems() {
+            const items = await api(API_FEED, 'get_unread');
+            const list = document.getElementById('feed-list');
+            
+            if(items.length === 0) {
+                list.innerHTML = "<div style='text-align:center; padding:20px; color:var(--text-muted)'>All caught up.</div>";
+                return;
+            }
+
+            list.innerHTML = items.map(item => `
+                <div class="feed-item-row" id="row-${item.id}">
+                    <div style="flex:1;">
+                        <div class="feed-title" onclick="saveAndRead('${item.url}', ${item.id})">${item.title}</div>
+                        <div class="feed-meta">
+                            ${item.feed_title} &bull; ${new Date(item.pub_date).toLocaleDateString()}
+                        </div>
+                    </div>
+                    <div class="feed-actions">
+                        <button class="btn-icon" title="Mark as Read" onclick="markRead(${item.id})">✓</button>
+                        <button class="btn-icon" title="Open Original" onclick="window.open('${item.url}', '_blank')">🔗</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function markRead(id) {
+            // Optimistic UI update
+            document.getElementById(`row-${id}`).style.opacity = '0.5';
+            await api(API_FEED, 'mark_read', { id });
+            document.getElementById(`row-${id}`).remove();
+        }
+
+        async function saveAndRead(url, id) {
+            const row = document.getElementById(`row-${id}`);
+            const originalText = row.innerHTML;
+            row.innerHTML = "Saving to library...";
+
+            // 1. Mark as read in Feed DB
+            api(API_FEED, 'mark_read', { id });
+
+            // 2. Save to Library DB (Heavy lifting)
+            const res = await api(API_LIB, 'save', { url });
+
+            if(res && res.success) {
+                window.location.href = `reader.html?id=${res.id}`;
+            } else {
+                row.innerHTML = originalText;
+                alert("Could not save article content.");
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
