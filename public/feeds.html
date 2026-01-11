@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <script src="theme.js"></script>
     <style>
-        .feed-controls { display: flex; gap:10px; margin-bottom: 20px; padding: 15px; background: var(--border); border-radius: 8px;}
+        /* Feed List Styles */
+        .feed-controls { display: flex; gap:10px; margin-bottom: 20px; padding: 15px; background: var(--surface-color); border: 1px solid var(--border); border-radius: 8px;}
         .feed-item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--border); }
         .feed-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
         .feed-title { font-weight: 600; font-size: 1rem; color: var(--text-main); cursor: pointer; }
@@ -15,6 +16,31 @@
         .feed-actions { display: flex; gap: 10px; min-width: 80px; justify-content: flex-end;}
         .sub-list { font-size: 0.9rem; margin-bottom: 30px; border-bottom: 2px solid var(--text-main); padding-bottom: 15px; }
         .sub-tag { display: inline-block; padding: 4px 8px; background: var(--surface-color); border: 1px solid var(--border); border-radius: 4px; margin: 0 5px 5px 0; }
+
+        /* Preview Modal Styles */
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 900; backdrop-filter: blur(2px); }
+        .modal { 
+            position: fixed; top: 5%; left: 50%; transform: translateX(-50%); 
+            width: 90%; max-width: 800px; height: 90%; 
+            background: var(--bg-color); border: 1px solid var(--border); 
+            border-radius: 8px; z-index: 1000; display: flex; flex-direction: column; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+        .modal-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--surface-color); border-radius: 8px 8px 0 0; }
+        .modal-title { font-weight: 700; font-family: var(--font-serif); font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; }
+        .modal-actions-bar { padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-color); display: flex; justify-content: space-between; align-items: center;}
+        
+        /* The Content Area */
+        #preview-content { 
+            padding: 40px; 
+            overflow-y: auto; 
+            flex: 1; 
+            font-family: var(--reader-font-family, serif); /* Use Reader Font */
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        #preview-content img { max-width: 100%; height: auto; display: block; margin: 20px auto; }
+        #preview-content p { margin-bottom: 1.5em; }
     </style>
 </head>
 <body>
@@ -40,12 +66,28 @@
         </div>
     </div>
 
+    <div id="preview-overlay" class="overlay hidden" onclick="closePreview()"></div>
+    <div id="preview-modal" class="modal hidden">
+        <div class="modal-header">
+            <div id="preview-title" class="modal-title">Title</div>
+            <button onclick="closePreview()" class="btn-icon" style="font-size:1.5rem;">&times;</button>
+        </div>
+        <div class="modal-actions-bar">
+            <button id="btn-save-preview" class="btn-save" onclick="saveCurrentPreview()">💾 Save to Library</button>
+            <a id="btn-open-original" href="#" target="_blank" class="logout" style="font-size:0.9rem;">Open Original 🔗</a>
+        </div>
+        <div id="preview-content">
+            </div>
+    </div>
+
     <script>
         const API_FEED = '/api/feeds';
-        const API_LIB = '/api/library'; // For saving
+        const API_LIB = '/api/library';
         const KEY = localStorage.getItem('clean_reader_key');
 
         if(!KEY) window.location.href = 'index.html';
+
+        let currentPreviewUrl = null;
 
         async function api(endpoint, type, body={}) {
             const res = await fetch(`${endpoint}?type=${type}`, {
@@ -61,6 +103,8 @@
             loadItems();
         }
 
+        // --- FEED MANAGEMENT ---
+
         async function addFeed() {
             const url = document.getElementById('new-feed-url').value;
             if(!url) return;
@@ -68,7 +112,7 @@
             await api(API_FEED, 'add_feed', { url });
             document.getElementById('new-feed-url').value = "";
             document.querySelector('.btn-save').innerText = "Add";
-            init(); // Reload all
+            init();
         }
 
         async function refreshFeeds() {
@@ -111,42 +155,95 @@
             list.innerHTML = items.map(item => `
                 <div class="feed-item-row" id="row-${item.id}">
                     <div style="flex:1;">
-                        <div class="feed-title" onclick="saveAndRead('${item.url}', ${item.id})">${item.title}</div>
+                        <div class="feed-title" onclick="openPreview('${item.url}', ${item.id})">${item.title}</div>
                         <div class="feed-meta">
                             ${item.feed_title} &bull; ${new Date(item.pub_date).toLocaleDateString()}
                         </div>
                     </div>
                     <div class="feed-actions">
                         <button class="btn-icon" title="Mark as Read" onclick="markRead(${item.id})">✓</button>
-                        <button class="btn-icon" title="Open Original" onclick="window.open('${item.url}', '_blank')">🔗</button>
                     </div>
                 </div>
             `).join('');
         }
 
         async function markRead(id) {
-            // Optimistic UI update
-            document.getElementById(`row-${id}`).style.opacity = '0.5';
+            const row = document.getElementById(`row-${id}`);
+            if(row) {
+                row.style.opacity = '0.5';
+                setTimeout(() => row.remove(), 500);
+            }
             await api(API_FEED, 'mark_read', { id });
-            document.getElementById(`row-${id}`).remove();
         }
 
-        async function saveAndRead(url, id) {
-            const row = document.getElementById(`row-${id}`);
-            const originalText = row.innerHTML;
-            row.innerHTML = "Saving to library...";
+        // --- PREVIEW LOGIC ---
 
-            // 1. Mark as read in Feed DB
-            api(API_FEED, 'mark_read', { id });
+        async function openPreview(url, id) {
+            // 1. Reset Modal UI
+            document.getElementById('preview-overlay').classList.remove('hidden');
+            document.getElementById('preview-modal').classList.remove('hidden');
+            document.getElementById('preview-title').innerText = "Loading...";
+            document.getElementById('preview-content').innerHTML = "<div style='text-align:center; margin-top:50px;'>Fetching content...</div>";
+            
+            const btnSave = document.getElementById('btn-save-preview');
+            btnSave.disabled = true;
+            btnSave.innerText = "💾 Save to Library";
 
-            // 2. Save to Library DB (Heavy lifting)
-            const res = await api(API_LIB, 'save', { url });
+            // 2. Mark as read in list (Optimistic)
+            markRead(id);
 
-            if(res && res.success) {
-                window.location.href = `reader.html?id=${res.id}`;
-            } else {
-                row.innerHTML = originalText;
-                alert("Could not save article content.");
+            // 3. Fetch Preview
+            try {
+                const res = await fetch(`${API_FEED}?type=preview&url=${encodeURIComponent(url)}`, {
+                    headers: { 'x-auth-key': KEY }
+                });
+                const data = await res.json();
+                
+                if(data.error) throw new Error(data.error);
+
+                // 4. Render
+                document.getElementById('preview-title').innerText = data.title;
+                document.getElementById('preview-content').innerHTML = data.content;
+                document.getElementById('btn-open-original').href = data.url;
+                
+                // Enable Save
+                currentPreviewUrl = data.url;
+                btnSave.disabled = false;
+
+            } catch(e) {
+                document.getElementById('preview-content').innerHTML = `<div style="text-align:center; color:red; margin-top:50px;">Error loading preview: ${e.message}</div>`;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-overlay').classList.add('hidden');
+            document.getElementById('preview-modal').classList.add('hidden');
+            currentPreviewUrl = null;
+        }
+
+        async function saveCurrentPreview() {
+            if(!currentPreviewUrl) return;
+            const btn = document.getElementById('btn-save-preview');
+            const originalText = btn.innerText;
+            btn.innerText = "Saving...";
+            
+            try {
+                const res = await fetch(`${API_LIB}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-auth-key': KEY },
+                    body: JSON.stringify({ type: 'save', url: currentPreviewUrl })
+                });
+                const data = await res.json();
+
+                if(data.success) {
+                    btn.innerText = "Saved!";
+                    btn.disabled = true;
+                } else {
+                    throw new Error("API returned failure");
+                }
+            } catch(e) {
+                alert("Error saving to library.");
+                btn.innerText = originalText;
             }
         }
 

@@ -1,5 +1,6 @@
 import { createClient } from "@libsql/client";
 import { JSDOM } from "jsdom";
+import { Readability } from "@mozilla/readability";
 
 const turso = createClient({
   url: process.env.TURSO_DATABASE_URL,
@@ -7,7 +8,7 @@ const turso = createClient({
 });
 
 export default async function handler(req, res) {
-  // Auth Check
+  // Global Auth Check
   if (req.headers['x-auth-key'] !== process.env.MY_SECRET_KEY) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -16,8 +17,42 @@ export default async function handler(req, res) {
 
   try {
     switch (type) {
+      // --- NEW: PREVIEW MODE (No DB Save) ---
+      case 'preview': {
+        if (!url) throw new Error("URL required");
+
+        // 1. Fetch (clean hash fragments)
+        const fetchUrl = url.split('#')[0];
+        const response = await fetch(fetchUrl, { 
+            headers: { "User-Agent": "Mozilla/5.0 CleanReader/1.0" }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch URL: ${response.status}`);
+        }
+        
+        // 2. Parse
+        const html = await response.text();
+        const doc = new JSDOM(html, { url: fetchUrl });
+        const reader = new Readability(doc.window.document);
+        const article = reader.parse();
+
+        if (!article) {
+            throw new Error("Readability unable to parse content.");
+        }
+
+        // 3. Return content directly
+        return res.json({
+          title: article.title,
+          content: article.content,
+          url: fetchUrl,
+          is_preview: true
+        });
+      }
+
+      // --- FEED MANAGEMENT ---
+
       case 'add_feed': {
-        // 1. Fetch to validate and get title
         const feedData = await fetchAndParse(url);
         if (!feedData) throw new Error("Could not parse feed");
 
@@ -29,17 +64,16 @@ export default async function handler(req, res) {
       }
 
       case 'refresh_feeds': {
-        // 1. Get all feeds
         const feeds = await turso.execute("SELECT * FROM feeds");
         let newCount = 0;
 
-        // 2. Fetch all in parallel (limit this if you have 50+ feeds)
+        // Fetch all feeds in parallel
         await Promise.all(feeds.rows.map(async (feed) => {
           try {
             const data = await fetchAndParse(feed.url);
             if (!data) return;
 
-            // 3. Insert items (Ignore duplicates via SQL UNIQUE constraint)
+            // Insert items (Ignore duplicates via SQL UNIQUE constraint)
             for (const item of data.items) {
                try {
                  await turso.execute({
@@ -49,7 +83,7 @@ export default async function handler(req, res) {
                    args: [feed.id, item.guid, item.title, item.link, item.pubDate]
                  });
                  newCount++;
-               } catch(err) { /* ignore individual insert errors */ }
+               } catch(err) { /* ignore duplicates */ }
             }
           } catch (e) { console.error(`Failed ${feed.url}`, e); }
         }));
@@ -82,7 +116,6 @@ export default async function handler(req, res) {
       }
 
       case 'delete_feed': {
-          // Delete items first, then feed
           await turso.execute({ sql: "DELETE FROM feed_items WHERE feed_id = ?", args: [id] });
           await turso.execute({ sql: "DELETE FROM feeds WHERE id = ?", args: [id] });
           return res.json({ success: true });
@@ -106,7 +139,6 @@ async function fetchAndParse(url) {
 
   const title = doc.querySelector("channel > title, feed > title")?.textContent || "Unknown Feed";
   
-  // Try RSS 'item' or Atom 'entry'
   const els = doc.querySelectorAll("item, entry");
   const items = [];
 
