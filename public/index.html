@@ -181,7 +181,7 @@
             el.innerText = "Saving & Loading...";
             el.style.color = "var(--accent)";
 
-            const res = await api('save', 'POST', { url });
+            const res = await api('save', 'POST', { url, hn_id: hnId });
             
             if(res && res.success && res.id) {
                 // Redirect to reader with BOTH our ID and HN ID
