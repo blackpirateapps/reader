@@ -3,12 +3,17 @@
 ## Project Structure & Module Organization
 This repo is a small Vercel-hosted reader app. Key locations:
 - `api/` contains serverless endpoints (`library.js`, `feeds.js`) that handle database access, article parsing, and feed management.
-- `public/` contains the React SPA entry (`index.html`, `app.js`, `app.css`) and legacy redirect shells (`reader.html`, `highlights.html`, `feeds.html`, `settings.html`).
+- `src/` contains the React UI (views, components, styles).
+- `public/` stores legacy redirect shells (`reader.html`, `highlights.html`, `feeds.html`, `settings.html`) that forward to the SPA.
+- `index.html` is the Vite entry point; `vite.config.js` configures dev/build output.
 - `package.json` defines runtime dependencies and local scripts.
 
 ## Build, Test, and Development Commands
 - `npm install` installs dependencies.
-- `npm run start` runs `vercel dev` for local development (requires the Vercel CLI and environment variables).
+- `npm run dev` runs the Vite dev server for the UI.
+- `npm run dev:api` runs `vercel dev` for local API routes (use alongside `npm run dev`).
+- `npm run build` produces the production build in `dist/`.
+- `npm run preview` serves the production build locally.
 
 ## Coding Style & Naming Conventions
 - JavaScript uses 2-space indentation, semicolons, and `const`/`let` (no TypeScript).
@@ -17,7 +22,7 @@ This repo is a small Vercel-hosted reader app. Key locations:
 
 ## Testing Guidelines
 No automated tests are configured. Validate changes by running the local app and exercising:
-- UI flows in the SPA (`public/index.html`).
+- UI flows in the SPA (`index.html` + `src/`).
 - API routes (e.g., `GET /api/library?type=list`, `POST /api/feeds?type=refresh_feeds`).
 Add tests only if you introduce a framework; otherwise keep manual verification notes in PRs.
 

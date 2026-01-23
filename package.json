@@ -2,11 +2,21 @@
   "name": "clean-reader",
   "version": "1.0.0",
   "scripts": {
-    "start": "vercel dev"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev:api": "vercel dev"
   },
   "dependencies": {
     "@libsql/client": "latest",
     "@mozilla/readability": "latest",
-    "jsdom": "^23.0.0"
+    "jsdom": "^23.0.0",
+    "lucide-react": "^0.451.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.2",
+    "vite": "^5.4.8"
   }
 }
